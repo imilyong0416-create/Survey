@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리반 첫인상 설문</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--tx:#222;--sub:#666;--ac:#3b6ef5;--ac-tx:#fff;--bd:#ddd;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17181b;--card:#222428;--tx:#eee;--sub:#aaa;--ac:#6f94ff;--ac-tx:#101010;--bd:#3a3d42}}
+:root[data-theme="dark"]{--bg:#17181b;--card:#222428;--tx:#eee;--sub:#aaa;--ac:#6f94ff;--ac-tx:#101010;--bd:#3a3d42}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Noto Sans KR","Apple SD Gothic Neo",sans-serif;line-height:1.55}
+main{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.4rem;margin:8px 0 4px}
+p.sub{color:var(--sub);margin:0 0 18px;font-size:.95rem}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-weight:600;margin-bottom:8px}
+select,textarea{width:100%;box-sizing:border-box;font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px}
+textarea{min-height:84px;resize:vertical}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 18px;background:var(--ac);color:var(--ac-tx);cursor:pointer;width:100%}
+button.ghost{background:transparent;color:var(--ac);border:1px solid var(--bd);margin-top:10px}
+button:disabled{opacity:.5;cursor:default}
+.tag{display:inline-block;font-size:.75rem;color:var(--sub);border:1px solid var(--bd);border-radius:20px;padding:0 8px;margin-left:6px;font-weight:400}
+.msg{color:var(--sub);font-size:.9rem;margin-top:10px}
+.res h3{margin:0 0 8px;font-size:1.05rem}
+.res li{margin:0 0 6px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>우리반 첫인상 설문</h1>
+<p class="sub">친구들의 첫인상을 솔직하게 적어 주세요. 한 사람당 6명만 쓰면 돼요. 다른 친구들에게는 작성자가 공개되지 않아요.</p>
+
+<section id="s1" class="card">
+  <label for="me">내 이름을 선택해 주세요</label>
+  <select id="me"><option value="">선택…</option></select>
+  <div style="height:12px"></div>
+  <button id="start" disabled>시작하기</button>
+  <div id="s1msg" class="msg"></div>
+  <div id="cbox" class="hide" style="margin-top:12px">
+    <p id="ctext" style="margin:0 0 4px;font-weight:600"></p>
+    <p class="sub" style="margin:0 0 12px">제출하면 이 이름은 다른 친구가 선택할 수 없게 돼요.</p>
+    <button id="cyes">네, 맞아요</button>
+    <button id="cno" class="ghost">다시 고르기</button>
+  </div>
+  <button id="showRes" class="ghost hide">결과 보기 (관리자)</button>
+</section>
+
+<section id="s2" class="hide">
+  <div id="notice" class="msg" style="margin:0 0 12px"></div>
+  <div id="list"></div>
+  <button id="submit">제출하기</button>
+  <div id="err" class="msg"></div>
+</section>
+
+<section id="s3" class="card hide">
+  <h2 style="margin-top:0">제출 완료!</h2>
+  <p class="sub" style="margin:0">참여해 줘서 고마워요 🙌</p>
+  <button id="back" class="ghost">수정하러 돌아가기</button>
+</section>
+
+<section id="s4" class="hide"></section>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBD5JXl2eCO0VAZzba1nI5LzCRnhL0egWI",
+  authDomain: "project-ad8f7.firebaseapp.com",
+  projectId: "project-ad8f7",
+  storageBucket: "project-ad8f7.firebasestorage.app",
+  messagingSenderId: "231265706595",
+  appId: "1:231265706595:web:3e21926633a6136f6d0e56",
+  measurementId: "G-6WPR3NG6G2"
+};
+// 반 친구 이름 목록(32명)과 고정 2명을 여기서 바꿀 수 있어요.
+const NAMES = ["김건우","이혜미","이밀레나","박아르뚜르","백동수","김다혜","김은솔","문예서","박가희","박민규","박서영","박소율","박승아","박정연","박희원","성재현","이민주","이수아","이수연","이시율","이유나","임이준","임일용","장선우","전혜림","정지윤","진유정","칸고디자","한진헌","홍석희","홍지후","노하은선생님"];
+const FIXED = ["장선우", "노하은선생님"];
+const RANDOM_COUNT = 4;
+const ADMIN_KEY = "702mX"; // 관리자 화면에서 작성자 보기용 키
+
+const $ = id => document.getElementById(id);
+const meSel = $("me");
+let db = null, user = null;
+
+NAMES.forEach(n => { const o = document.createElement("option"); o.value = n; o.textContent = n; meSel.appendChild(o); });
+meSel.addEventListener("change", () => { $("start").disabled = !meSel.value; });
+
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+let savedItems = null;
+let takenNames = new Set();
+async function prepare(me) {
+  if (memo[me]) return;
+  try { const s0 = localStorage.getItem("fi-assign-" + me); if (s0) { const p0 = JSON.parse(s0); if (Array.isArray(p0) && p0.length) return; } } catch (e) {}
+  const fixed = FIXED.filter(n => n !== me);
+  const need = FIXED.length + RANDOM_COUNT - fixed.length;
+  const cand = NAMES.filter(n => n !== me && !FIXED.includes(n));
+  const cnt = {}; cand.forEach(n => { cnt[n] = 0; });
+  try {
+    if (db) {
+      const snap = await db.collection("picks").get();
+      snap.docs.forEach(d => { ((d.data() || {}).t || []).forEach(i => { const nm = NAMES[i]; if (nm in cnt) cnt[nm]++; }); });
+    }
+  } catch (e) {}
+  const picked = shuffle(cand).sort((a, b) => cnt[a] - cnt[b]).slice(0, need);
+  const list = fixed.concat(picked);
+  memo[me] = list;
+  try { localStorage.setItem("fi-assign-" + me, JSON.stringify(list)); } catch (e) {}
+  try { if (db) await db.collection("picks").doc("p" + Math.random().toString(36).slice(2, 12)).set({ t: picked.map(n => NAMES.indexOf(n)) }); } catch (e) {}
+}
+async function refreshTaken() {
+  try {
+    if (db) {
+      const snap = await db.collection("submitted").get();
+      takenNames = new Set(snap.docs.map(d => (d.data() || {}).name).filter(Boolean));
+    }
+  } catch (e) {}
+  Array.from(meSel.options).forEach(o => { if (!o.value) return; const t = takenNames.has(o.value); o.disabled = t; o.textContent = o.value; });
+  if (takenNames.has(meSel.value)) { meSel.value = ""; $("start").disabled = true; }
+}
+async function loadSaved(me) {
+  savedItems = null;
+  try {
+    if (db && user) {
+      const s = await db.collection("responses").doc(await user.id()).get();
+      if (s && s.exists) { const v = s.data(); if (v && v.from === me && Array.isArray(v.items) && v.items.length) savedItems = v.items; }
+    }
+  } catch (e) {}
+  if (!savedItems) {
+    try { const l = localStorage.getItem("fi-saved-" + me); if (l) { const q = JSON.parse(l); if (Array.isArray(q) && q.length) savedItems = q; } } catch (e) {}
+  }
+}
+const memo = {};
+function assign(me) {
+  if (memo[me]) return memo[me];
+  const r = assign0(me); memo[me] = r; return r;
+}
+function assign0(me) {
+  if (savedItems && savedItems.length) return savedItems.map(x => x.to);
+  const key = "fi-assign-" + me;
+  try { const s = localStorage.getItem(key); if (s) { const p = JSON.parse(s); if (Array.isArray(p) && p.length) return p; } } catch (e) {}
+  const fixed = FIXED.filter(n => n !== me);
+  const need = FIXED.length + RANDOM_COUNT - fixed.length;
+  const pool = shuffle(NAMES.filter(n => n !== me && !FIXED.includes(n)));
+  const list = fixed.concat(pool.slice(0, need));
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+  return list;
+}
+
+$("start").addEventListener("click", () => {
+  if (!meSel.value) return;
+  $("ctext").textContent = "“" + meSel.value + "” 님이 맞나요?";
+  $("cbox").classList.remove("hide"); $("start").classList.add("hide"); meSel.disabled = true;
+});
+$("cno").addEventListener("click", () => { $("cbox").classList.add("hide"); $("start").classList.remove("hide"); meSel.disabled = false; });
+$("cyes").addEventListener("click", async () => {
+  $("cbox").classList.add("hide"); $("start").classList.remove("hide"); meSel.disabled = false;
+  const me = meSel.value; if (!me) return;
+  await refreshTaken();
+  if (takenNames.has(me)) { $("s1msg").textContent = "이미 제출한 이름이에요. 다른 이름을 골라 주세요."; return; }
+  $("s1msg").textContent = "";
+  await prepare(me);
+  savedItems = null;
+  const targets = assign(me);
+  const box = $("list"); box.textContent = "";
+  targets.forEach((t, i) => {
+    const c = document.createElement("div"); c.className = "card";
+    const l = document.createElement("label"); l.htmlFor = "t" + i; l.textContent = t + "의 첫인상은?";
+    if (FIXED.includes(t)) { const g = document.createElement("span"); g.className = "tag"; g.textContent = "공통"; l.appendChild(g); }
+    const ta = document.createElement("textarea"); ta.id = "t" + i; if (savedItems) { const sv = savedItems.find(x => x.to === t); if (sv) ta.value = sv.text; } ta.placeholder = "처음 봤을 때 느낌을 자유롭게 적어 주세요";
+    c.appendChild(l); c.appendChild(ta); box.appendChild(c);
+  });
+  $("s1").classList.add("hide"); $("s2").classList.remove("hide");
+  $("notice").textContent = savedItems ? "이전에 제출한 내용을 불러왔어요. 고쳐서 다시 제출하면 덮어써져요." : "";
+  $("submit").textContent = savedItems ? "수정해서 다시 제출" : "제출하기";
+  try { const lst = localStorage.getItem("fi-last"); if (lst && lst !== me) $("notice").textContent = "이 기기에서 이미 " + lst + " 이름으로 제출했어요. 지금 제출하면 " + lst + "의 답은 사라지고 " + me + "(으)로 바뀌어요."; } catch (e9) {}
+  window.scrollTo(0, 0);
+});
+
+$("submit").addEventListener("click", async () => {
+  const me = meSel.value, err = $("err"); err.textContent = "";
+  const targets = assign(me);
+  const items = targets.map((t, i) => ({ to: t, text: $("t" + i).value.trim() }));
+  if (items.some(x => !x.text)) { err.textContent = "모든 친구의 첫인상을 적어 주세요."; return; }
+  if (!db || !user) { err.textContent = "저장 기능을 불러오지 못했어요. 새로고침해 주세요."; return; }
+  const btn = $("submit"); btn.disabled = true;
+  try {
+    const ref = db.collection("responses").doc(await user.id());
+    let prev = null; try { prev = localStorage.getItem("fi-last"); } catch (e5) {}
+    if (!prev) { try { const ps = await ref.get(); if (ps && ps.exists) prev = (ps.data() || {}).from || null; } catch (e6) {} }
+    await ref.set({ from: me, items: items, at: Date.now() });
+    if (prev && prev !== me && NAMES.indexOf(prev) >= 0) { try { await db.collection("submitted").doc("n" + NAMES.indexOf(prev)).delete(); } catch (e7) {} }
+    try { localStorage.setItem("fi-last", me); } catch (e8) {}
+    try { await db.collection("submitted").doc("n" + NAMES.indexOf(me)).set({ name: me, at: Date.now() }); } catch (e3) {}
+    try { localStorage.setItem("fi-saved-" + me, JSON.stringify(items)); } catch (e2) {}
+    $("s2").classList.add("hide"); $("s3").classList.remove("hide");
+  } catch (e) {
+    err.textContent = "제출에 실패했어요. 잠시 후 다시 시도해 주세요."; btn.disabled = false;
+  }
+});
+
+$("back").addEventListener("click", () => {
+  $("s3").classList.add("hide"); $("s2").classList.remove("hide");
+  $("submit").disabled = false; $("submit").textContent = "수정해서 다시 제출";
+  $("notice").textContent = "고쳐서 다시 제출하면 이전 내용이 덮어써져요.";
+  window.scrollTo(0, 0);
+});
+
+async function wipeAll() {
+  for (const col of ["responses", "submitted", "picks"]) {
+    const snap = await db.collection(col).get();
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const b = db.batch();
+      snap.docs.slice(i, i + 400).forEach(d => b.delete(d.ref));
+      await b.commit();
+    }
+  }
+}
+
+let resData = null, showAuthors = false;
+function renderRes() {
+  const wrap = $("s4"); wrap.textContent = "";
+  const done = resData.done, by = resData.by;
+  const head = document.createElement("p"); head.className = "sub";
+  head.textContent = "제출 " + done.size + "/" + NAMES.length + "명 · " + (showAuthors ? "작성자 표시 중" : "작성자는 표시되지 않아요");
+  wrap.appendChild(head);
+
+  const ctl = document.createElement("div"); ctl.className = "card";
+  if (!showAuthors) {
+    const inp = document.createElement("input"); inp.type = "password"; inp.placeholder = "관리자 키";
+    inp.style.cssText = "width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);margin-bottom:8px";
+    const b = document.createElement("button"); b.textContent = "작성자 보기";
+    const m = document.createElement("div"); m.className = "msg";
+    b.addEventListener("click", () => { if (inp.value === ADMIN_KEY) { showAuthors = true; renderRes(); } else { m.textContent = "키가 맞지 않아요."; } });
+    ctl.appendChild(inp); ctl.appendChild(b); ctl.appendChild(m);
+  } else {
+    const b = document.createElement("button"); b.className = "ghost"; b.style.marginTop = "0"; b.textContent = "작성자 숨기기";
+    b.addEventListener("click", () => { showAuthors = false; renderRes(); });
+    ctl.appendChild(b);
+  }
+  wrap.appendChild(ctl);
+
+  const rc = document.createElement("div"); rc.className = "card";
+  const rb = document.createElement("button"); rb.className = "ghost"; rb.style.marginTop = "0"; rb.style.color = "#d33"; rb.textContent = "설문 내용 전부 삭제 (리셋)";
+  rb.addEventListener("click", async () => {
+    if (!confirm("모든 응답과 제출 기록을 삭제할까요? 되돌릴 수 없어요.")) return;
+    if (!confirm("마지막 확인이에요. 정말 삭제할까요?")) return;
+    rb.disabled = true; rb.textContent = "삭제하는 중…";
+    try { await wipeAll(); await loadRes(); alert("삭제했어요."); }
+    catch (e) { rb.disabled = false; rb.textContent = "설문 내용 전부 삭제 (리셋)"; alert("삭제에 실패했어요. 다시 시도해 주세요."); }
+  });
+  rc.appendChild(rb); wrap.appendChild(rc);
+
+  const miss = NAMES.filter(n => !done.has(n));
+  const mc = document.createElement("div"); mc.className = "card res";
+  const mh = document.createElement("h3"); mh.textContent = "아직 제출 안 한 친구 (" + miss.length + ")"; mc.appendChild(mh);
+  const mp = document.createElement("p"); mp.style.margin = "0"; mp.textContent = miss.length ? miss.join(", ") : "모두 제출했어요 🎉"; mc.appendChild(mp);
+  wrap.appendChild(mc);
+
+  NAMES.forEach(n => {
+    const c = document.createElement("div"); c.className = "card res";
+    const h = document.createElement("h3"); h.textContent = n + " (" + by[n].length + ")"; c.appendChild(h);
+    const ul = document.createElement("ul");
+    shuffle(by[n]).forEach(x => { const li = document.createElement("li"); li.textContent = showAuthors ? x.t + "  —  " + x.f : x.t; ul.appendChild(li); });
+    c.appendChild(ul); wrap.appendChild(c);
+  });
+}
+
+let unlocked = false;
+const loadRes = ((fn) => fn)(async () => {
+  const wrap = $("s4"); wrap.textContent = "불러오는 중…"; wrap.classList.remove("hide");
+  try {
+    const snap = await db.collection("responses").get();
+    const by = {}; NAMES.forEach(n => { by[n] = []; });
+    const done = new Set();
+    snap.docs.forEach(d => {
+      const dv = d.data() || {}; const ents = [];
+      if (dv.items) ents.push(dv);
+      Object.keys(dv).forEach(k => { if (/^n\d+$/.test(k) && dv[k]) ents.push(dv[k]); });
+      ents.forEach(v => { if (v.from) done.add(v.from); (v.items || []).forEach(it => { if (by[it.to]) by[it.to].push({ t: it.text, f: v.from || "?" }); }); });
+    });
+    resData = { by: by, done: done }; showAuthors = false; renderRes();
+  } catch (e) { wrap.textContent = "결과를 불러오지 못했어요."; }
+});
+
+(async () => {
+  try {
+    $("showRes").addEventListener("click", () => {
+      if (unlocked) { loadRes(); return; }
+      const wrap = $("s4"); wrap.textContent = ""; wrap.classList.remove("hide");
+      const c = document.createElement("div"); c.className = "card";
+      const inp = document.createElement("input"); inp.type = "password"; inp.inputMode = "numeric"; inp.placeholder = "비밀번호";
+      inp.style.cssText = "width:100%;box-sizing:border-box;font:inherit;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);margin-bottom:8px";
+      const b = document.createElement("button"); b.textContent = "확인";
+      const m = document.createElement("div"); m.className = "msg";
+      b.addEventListener("click", () => { if (inp.value === ADMIN_KEY) { unlocked = true; loadRes(); } else { m.textContent = "비밀번호가 맞지 않아요."; } });
+      c.appendChild(inp); c.appendChild(b); c.appendChild(m); wrap.appendChild(c);
+    });
+    const chkAdmin = () => { if (location.hash === "#admin") $("showRes").classList.remove("hide"); };
+    chkAdmin(); window.addEventListener("hashchange", chkAdmin);
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    let uid = null;
+    try { uid = localStorage.getItem("fi-uid"); } catch (e) {}
+    if (!uid) { uid = "u" + Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem("fi-uid", uid); } catch (e) {} }
+    user = { id: async () => uid, isOwner: async () => true };
+    await refreshTaken();
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
